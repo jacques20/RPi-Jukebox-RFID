@@ -42,6 +42,10 @@ remove_after=3.0
 # Format: first-three-uid-bytes-as-hex:full-card-id
 # Example: partial_uids=536574:5365744c030001,53996b:53996b4c030001
 partial_uids=
+# Optional suffix for NTAG-style tags from the same batch where the first
+# three UID bytes are stable but the remaining bytes are shared.
+# Example: partial_uid_suffix=4c030001
+partial_uid_suffix=
 EOF
 fi
 printf "MFRC522" > "${JUKEBOX_HOME_DIR}"/scripts/deviceName.txt

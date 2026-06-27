@@ -50,8 +50,9 @@ If your RC522 reader is unreliable with IRQ or with NTAG-style cards, edit `/hom
 speed=10000
 pin_irq=
 pin_rst=22
-remove_after=3.0
+remove_after=15.0
 partial_uids=536574:5365744c030001,53996b:53996b4c030001,53fa63:53fa634c030001
+partial_uid_suffix=4c030001
 ```
 
 Then restart the service:
@@ -125,7 +126,8 @@ Expected behavior:
 - Placing a mapped card logs `Card detected.` and `Trigger Play Cardid=<card-id>`.
 - Keeping the card on the reader keeps playback running.
 - Removing the card pauses playback after about `remove_after` seconds.
-- A new NTAG-style card may need a new `partial_uids` entry if it reads intermittently. Use the first three UID bytes as the left side and the desired full card ID as the right side.
+- A new NTAG-style card from the same batch may work automatically when `partial_uid_suffix=4c030001` is set.
+- A new NTAG-style card from a different batch may need a new `partial_uids` entry if it reads intermittently. Use the first three UID bytes as the left side and the desired full card ID as the right side.
 
 Tonnie-Py cards used during testing:
 
@@ -134,6 +136,8 @@ Tonnie-Py cards used during testing:
 | ABBA | `5365744c030001` | `536574` |
 | Queen | `53996b4c030001` | `53996b` |
 | Ed Sheeran | `53fa634c030001` | `53fa63` |
+| Snow Patrol | `5330414c030001` | `533041` |
+| Paramore | `53eb2c4c030001` | `53eb2c` |
 
 ### Optional RC522 configuration
 
@@ -145,6 +149,7 @@ pin_irq=18
 pin_rst=22
 remove_after=3.0
 partial_uids=
+partial_uid_suffix=
 ```
 
 - `speed` is the SPI speed. Some inexpensive RC522 boards or long jumper wires may require a lower value such as `50000`, `25000`, or `10000`.
@@ -152,6 +157,7 @@ partial_uids=
 - `pin_rst` is used for a hardware reset pulse when the reader starts.
 - `remove_after` controls how long `PLACENOTSWIPE` waits before treating a missing card read as card removal.
 - `partial_uids` is an optional comma-separated map for NTAG-style tags that only expose the first UID cascade reliably. Example: `partial_uids=536574:5365744c030001,53996b:53996b4c030001`.
+- `partial_uid_suffix` is an optional shared suffix for batches of NTAG-style cards where the first three UID bytes are stable and the remaining bytes are shared. Example: `partial_uid_suffix=4c030001` turns a partial UID `533041` into card ID `5330414c030001`.
 
 When `partial_uids` is used, the first value is the first three UID bytes as hex and the second value is the full card ID you want Phoniebox to use.
 

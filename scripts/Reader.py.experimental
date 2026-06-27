@@ -64,6 +64,7 @@ class Mfrc522Reader(object):
         self.consecutive_misses = 0
 
         self.remove_after = float(self.config.get('remove_after', 3.0))
+        self.partial_uid_suffix = self.config.get('partial_uid_suffix', '').lower()
         self.known_partial_uids = self._parse_partial_uid_map(
             self.config.get('partial_uids', '')
         )
@@ -82,6 +83,7 @@ class Mfrc522Reader(object):
             'pin_rst': '22',
             'remove_after': '3.0',
             'partial_uids': '',
+            'partial_uid_suffix': '',
         }
         config_path = os.path.join(self.path, '..', 'settings', 'rc522.conf')
         if not os.path.isfile(config_path):
@@ -202,6 +204,8 @@ class Mfrc522Reader(object):
         known_card = self.known_partial_uids.get(tuple(uid1[1:4]))
         if known_card is not None:
             return known_card
+        if self.partial_uid_suffix:
+            return ''.join(f'{x:02x}' for x in uid1[1:4]) + self.partial_uid_suffix
 
         error = self.device.select_tag(uid1)
         if not error:
