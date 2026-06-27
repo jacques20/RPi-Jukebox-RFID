@@ -66,6 +66,75 @@ Use the logs to confirm card detection:
 journalctl -u phoniebox-rfid-reader -f
 ```
 
+## Recreate the Tonnie-Py NTAG Setup
+
+These are the exact steps used for the Tonnie-Py build with an RC522 reader and ISO14443A / NTAG-style cards.
+
+1. Install this fork and branch:
+
+```bash
+cd
+rm -f install-jukebox.sh
+wget https://raw.githubusercontent.com/jacques20/RPi-Jukebox-RFID/rc522-ntag-place-mode-fix/scripts/installscripts/install-jukebox.sh
+chmod +x install-jukebox.sh
+GIT_URL=https://github.com/jacques20/RPi-Jukebox-RFID.git GIT_BRANCH=rc522-ntag-place-mode-fix bash ./install-jukebox.sh
+```
+
+2. Configure RC522 support:
+
+```bash
+cd /home/pi/RPi-Jukebox-RFID
+./components/rfid-reader/RC522/setup_rc522.sh
+```
+
+3. Edit `/home/pi/RPi-Jukebox-RFID/settings/rc522.conf` for the Tonnie-Py card/reader behavior:
+
+```ini
+speed=10000
+pin_irq=
+pin_rst=22
+remove_after=3.0
+partial_uids=536574:5365744c030001,53996b:53996b4c030001,53fa63:53fa634c030001
+```
+
+4. Set place/remove playback mode so playback pauses when a card is removed:
+
+```bash
+printf 'PLACENOTSWIPE' > /home/pi/RPi-Jukebox-RFID/settings/Swipe_or_Place
+sudo chown pi:www-data /home/pi/RPi-Jukebox-RFID/settings/Swipe_or_Place
+sudo chmod 777 /home/pi/RPi-Jukebox-RFID/settings/Swipe_or_Place
+```
+
+5. Restart the services:
+
+```bash
+sudo systemctl restart phoniebox-rfid-reader.service
+sudo systemctl restart mpd.service
+```
+
+6. Verify the reader and playback:
+
+```bash
+systemctl status phoniebox-rfid-reader.service
+journalctl -u phoniebox-rfid-reader -f
+mpc status
+```
+
+Expected behavior:
+
+- Placing a mapped card logs `Card detected.` and `Trigger Play Cardid=<card-id>`.
+- Keeping the card on the reader keeps playback running.
+- Removing the card pauses playback after about `remove_after` seconds.
+- A new NTAG-style card may need a new `partial_uids` entry if it reads intermittently. Use the first three UID bytes as the left side and the desired full card ID as the right side.
+
+Tonnie-Py cards used during testing:
+
+| Card | Card ID | `partial_uids` key |
+|---|---|---|
+| ABBA | `5365744c030001` | `536574` |
+| Queen | `53996b4c030001` | `53996b` |
+| Ed Sheeran | `53fa634c030001` | `53fa63` |
+
 ### Optional RC522 configuration
 
 The setup script creates `<phoniebox_dir>/settings/rc522.conf` with default values:
