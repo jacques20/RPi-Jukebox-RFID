@@ -44,15 +44,15 @@ cd /home/pi/RPi-Jukebox-RFID
 ./components/rfid-reader/RC522/setup_rc522.sh
 ```
 
-If your RC522 reader is unreliable with IRQ or with NTAG-style cards, edit `/home/pi/RPi-Jukebox-RFID/settings/rc522.conf` after running the setup script. For polling mode and slow SPI, use values like:
+If your RC522 reader is unreliable with IRQ or with NTAG-style cards, edit `/home/pi/RPi-Jukebox-RFID/settings/rc522.conf` after running the setup script. For Tonnie-Py, stable full UID reads were achieved by increasing the distance between the tag and reader and using polling mode at `100000` SPI speed:
 
 ```ini
-speed=10000
+speed=100000
 pin_irq=
 pin_rst=22
-remove_after=15.0
-partial_uids=536574:5365744c030001,53996b:53996b4c030001,53fa63:53fa634c030001
-partial_uid_suffix=4c030001
+remove_after=3.0
+partial_uids=
+partial_uid_suffix=
 ```
 
 Then restart the service:
@@ -91,12 +91,15 @@ cd /home/pi/RPi-Jukebox-RFID
 3. Edit `/home/pi/RPi-Jukebox-RFID/settings/rc522.conf` for the Tonnie-Py card/reader behavior:
 
 ```ini
-speed=10000
+speed=100000
 pin_irq=
 pin_rst=22
 remove_after=3.0
-partial_uids=536574:5365744c030001,53996b:53996b4c030001,53fa63:53fa634c030001
+partial_uids=
+partial_uid_suffix=
 ```
+
+The Tonnie-Py root-cause finding was tag/reader coupling distance: when cards were placed too close to the RC522, full UID reads were intermittent. With a larger gap, the RC522 version register stayed stable at `0x82` and full UIDs read repeatedly without `partial_uids` or `partial_uid_suffix`.
 
 4. Set place/remove playback mode so playback pauses when a card is removed:
 
@@ -126,8 +129,7 @@ Expected behavior:
 - Placing a mapped card logs `Card detected.` and `Trigger Play Cardid=<card-id>`.
 - Keeping the card on the reader keeps playback running.
 - Removing the card pauses playback after about `remove_after` seconds.
-- A new NTAG-style card from the same batch may work automatically when `partial_uid_suffix=4c030001` is set.
-- A new NTAG-style card from a different batch may need a new `partial_uids` entry if it reads intermittently. Use the first three UID bytes as the left side and the desired full card ID as the right side.
+- If full UID reads are unstable, first adjust the physical card distance from the reader. Use `partial_uids` or `partial_uid_suffix` only as a fallback for hardware/card combinations that cannot be made stable.
 
 Tonnie-Py cards used during testing:
 
