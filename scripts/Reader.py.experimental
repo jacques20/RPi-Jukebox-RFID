@@ -7,6 +7,7 @@
 
 import os.path
 import sys
+import time
 
 import RPi.GPIO as GPIO
 import logging
@@ -52,13 +53,93 @@ class UsbReader(object):
 class Mfrc522Reader(object):
     def __init__(self):
         import pirc522
-        self.device = pirc522.RFID()
+        logging.getLogger('pirc522.rfid').setLevel(logging.CRITICAL)
+
+        self.path = os.path.dirname(os.path.realpath(__file__))
+        self.config = self._read_config()
+        self._pirc522 = pirc522
+        self._reset_reader()
+        self.last_card_id = None
+        self.absent_since = None
+        self.consecutive_misses = 0
+
+        self.remove_after = float(self.config.get('remove_after', 3.0))
+        self.known_partial_uids = self._parse_partial_uid_map(
+            self.config.get('partial_uids', '')
+        )
+
         path = os.path.dirname(os.path.realpath(__file__))
         readmode_uid = False
         if os.path.isfile(path + '/../settings/Rfidreader_Rc522_Readmode_UID'):
             with open(path + '/../settings/Rfidreader_Rc522_Readmode_UID', 'r') as f:
                 readmode_uid = f.read().rstrip().split(';', 1)[0] == 'ON'
         self._read_function = self._readCard_normal if readmode_uid else self._readCard_legacy
+
+    def _read_config(self):
+        config = {
+            'speed': '1000000',
+            'pin_irq': '18',
+            'pin_rst': '22',
+            'remove_after': '3.0',
+            'partial_uids': '',
+        }
+        config_path = os.path.join(self.path, '..', 'settings', 'rc522.conf')
+        if not os.path.isfile(config_path):
+            return config
+
+        with open(config_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#') or '=' not in line:
+                    continue
+                key, value = line.split('=', 1)
+                config[key.strip()] = value.strip().strip('"')
+        return config
+
+    def _parse_partial_uid_map(self, raw_value):
+        mappings = {}
+        for item in raw_value.split(','):
+            item = item.strip()
+            if not item or ':' not in item:
+                continue
+            partial, full_uid = item.split(':', 1)
+            try:
+                key = tuple(int(partial[i:i + 2], 16) for i in range(0, len(partial), 2))
+            except ValueError:
+                logger.warning("Ignoring invalid RC522 partial UID mapping: %s", item)
+                continue
+            mappings[key] = full_uid.lower()
+        return mappings
+
+    def _config_int(self, key, default):
+        value = self.config.get(key, default)
+        if value in ('', 'none', 'None', 'null', 'NULL'):
+            return None
+        return int(value)
+
+    def _reset_reader(self):
+        try:
+            if hasattr(self, 'device'):
+                self.device.cleanup()
+        except Exception:
+            pass
+
+        GPIO.setwarnings(False)
+        pin_rst = self._config_int('pin_rst', 22)
+        if pin_rst is not None:
+            GPIO.setmode(GPIO.BOARD)
+            GPIO.setup(pin_rst, GPIO.OUT)
+            GPIO.output(pin_rst, 0)
+            time.sleep(0.2)
+            GPIO.output(pin_rst, 1)
+            time.sleep(0.5)
+            GPIO.cleanup(pin_rst)
+
+        self.device = self._pirc522.RFID(
+            speed=int(self.config.get('speed', 1000000)),
+            pin_irq=self._config_int('pin_irq', 18),
+            pin_rst=pin_rst or 0,
+        )
 
     def _readCard_legacy(self):
         # Scan for cards
@@ -76,19 +157,65 @@ class Mfrc522Reader(object):
         return None
 
     def _readCard_normal(self):
-        # Scan for cards
-        uid = self.device.read_id(as_number=True)
-        if not uid:
-            logger.debug("No Device ID found.")
+        deadline = time.monotonic() + 1.5
+        while time.monotonic() < deadline:
+            card_id = self._scan_once()
+            if card_id:
+                self.consecutive_misses = 0
+                self.absent_since = None
+                if card_id != self.last_card_id:
+                    self.last_card_id = card_id
+                    logger.info("Card detected.")
+                    logger.info(card_id)
+                    return card_id
+                return None
+            time.sleep(0.1)
+
+        self.consecutive_misses += 1
+        if self.consecutive_misses >= 5:
+            self._reset_reader()
+            self.consecutive_misses = 0
+
+        if self.last_card_id is not None:
+            now = time.monotonic()
+            if self.absent_since is None:
+                self.absent_since = now
+            if now - self.absent_since >= self.remove_after:
+                self.last_card_id = None
+                self.absent_since = None
+                return "__NO_CARD__"
+
+        return None
+
+    def _scan_once(self):
+        error, _tag_type = self.device.request()
+        if error:
             return None
-        card_id = str(uid)
-        logger.info("Card detected.")
-        logger.info(card_id)
-        return card_id
+
+        error, uid1 = self.device.anticoll()
+        if error or not uid1:
+            return None
+
+        if uid1[0] != 0x88:
+            return ''.join(f'{x:02x}' for x in uid1[0:4])
+
+        known_card = self.known_partial_uids.get(tuple(uid1[1:4]))
+        if known_card is not None:
+            return known_card
+
+        error = self.device.select_tag(uid1)
+        if not error:
+            error, uid2 = self.device.anticoll2()
+            if not error and uid2:
+                uid = uid1[1:4] + uid2[0:4]
+                return ''.join(f'{x:02x}' for x in uid)
+
+        return None
 
     def readCard(self):
         # Scan for cards
-        self.device.wait_for_tag()
+        if self._config_int('pin_irq', 18) is not None:
+            self.device.wait_for_tag()
         return self._read_function()
 
     @staticmethod

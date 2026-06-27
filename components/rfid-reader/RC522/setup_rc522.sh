@@ -30,9 +30,23 @@ sudo raspi-config nonint do_spi 0
 
 printf "Configure RFID reader in Phoniebox...\n"
 cp "${JUKEBOX_HOME_DIR}"/scripts/Reader.py.experimental "${JUKEBOX_HOME_DIR}"/scripts/Reader.py
+if [ ! -f "${JUKEBOX_HOME_DIR}"/settings/rc522.conf ]; then
+  cat > "${JUKEBOX_HOME_DIR}"/settings/rc522.conf <<'EOF'
+# RC522 reader options.
+# Pin numbers use physical board numbering to match pi-rc522 defaults.
+speed=1000000
+pin_irq=18
+pin_rst=22
+remove_after=3.0
+# Optional comma-separated partial UID fallbacks for NTAG-style tags.
+# Format: first-three-uid-bytes-as-hex:full-card-id
+# Example: partial_uids=536574:5365744c030001,53996b:53996b4c030001
+partial_uids=
+EOF
+fi
 printf "MFRC522" > "${JUKEBOX_HOME_DIR}"/scripts/deviceName.txt
-sudo chown pi:www-data "${JUKEBOX_HOME_DIR}"/scripts/deviceName.txt
-sudo chmod 644 "${JUKEBOX_HOME_DIR}"/scripts/deviceName.txt
+sudo chown pi:www-data "${JUKEBOX_HOME_DIR}"/scripts/deviceName.txt "${JUKEBOX_HOME_DIR}"/settings/rc522.conf
+sudo chmod 644 "${JUKEBOX_HOME_DIR}"/scripts/deviceName.txt "${JUKEBOX_HOME_DIR}"/settings/rc522.conf
 
 printf "Restarting phoniebox-rfid-reader service...\n"
 sudo systemctl restart phoniebox-rfid-reader.service

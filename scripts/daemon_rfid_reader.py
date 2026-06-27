@@ -5,7 +5,6 @@ import os
 import subprocess
 import time
 import re
-import signal
 
 from Reader import Reader
 
@@ -57,42 +56,36 @@ string = ''.join(extract)
 
 # if controlcards delay is deactivated, let the cards pass, otherwise, they have to wait...
 if sspc_nodelay == "ON":
-    ids = re.findall("(\d+)", string) # noqa W605
+    ids = re.findall(r"(\d+)", string)
 else:
     ids = ""
 
 
-# handler for RFID reading no cardid
-def handler(signum, frame):
+def pause_on_card_removed():
     logger.info('No RFID Signal detected.')
     try:
-        # force pause the player script
         logger.info('Trigger Pause Force')
         subprocess.call([dir_path + '/playout_controls.sh -c=playerpauseforce -v=0.1'], shell=True)
     except OSError:
         logger.info('Execution of Pause failed.')
 
 
-# associate the handler to signal alarm
-signal.signal(signal.SIGALRM, handler)
-
 while True:
     # slow down the card reading while loop
     time.sleep(0.2)
 
-    if swipe_or_place == "PLACENOTSWIPE":
-        # enable the signal alarm (if no card is present for 1 second)
-        signal.alarm(1)
-
-    # reading the card id
+    # reading the card id; some readers debounce card removal themselves.
     cardid = reader.readCard()
-
-    # disable the alarm after a successful read
-    signal.alarm(0)
 
     try:
         # start the player script and pass on the cardid (but only if new card or otherwise
         # "same_id_delay" seconds have passed)
+        if cardid == "__NO_CARD__":
+            if swipe_or_place == "PLACENOTSWIPE" and previous_id != "":
+                pause_on_card_removed()
+                previous_id = ""
+            continue
+
         if cardid is not None:
             if cardid != previous_id or (time.monotonic() - previous_time) >= float(same_id_delay) or cardid in str(ids):
                 logger.info('Trigger Play Cardid={cardid}'.format(cardid=cardid))
