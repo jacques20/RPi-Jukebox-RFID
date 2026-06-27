@@ -18,6 +18,54 @@
 
 By default Phoniebox uses the RC522 IRQ pin for card detection (on the Raspberry Pi and Zero normally GPIO 24 / physical pin 18). If IRQ is unreliable for your reader or OS/kernel combination, set `pin_irq=` in `settings/rc522.conf` to use polling mode instead.
 
+## Wiring
+
+Wire the RC522 to the Raspberry Pi SPI0 bus. Use 3.3 V only; do not power the RC522 from 5 V.
+
+| RC522 Pin | Raspberry Pi Physical Pin | GPIO / Function |
+|---|---:|---|
+| `3.3V` | 1 | 3.3 V power |
+| `RST` | 22 | GPIO 25 |
+| `GND` | 25 | Ground |
+| `IRQ` | 18 | GPIO 24 |
+| `MISO` | 21 | GPIO 9 / SPI0 MISO |
+| `MOSI` | 19 | GPIO 10 / SPI0 MOSI |
+| `SCK` | 23 | GPIO 11 / SPI0 SCLK |
+| `SDA` / `SS` | 24 | GPIO 8 / SPI0 CE0 |
+
+After enabling SPI, `/dev/spidev0.0` and `/dev/spidev0.1` should exist.
+
+## Setup Steps
+
+Recommended setup:
+
+```bash
+cd /home/pi/RPi-Jukebox-RFID
+./components/rfid-reader/RC522/setup_rc522.sh
+```
+
+If your RC522 reader is unreliable with IRQ or with NTAG-style cards, edit `/home/pi/RPi-Jukebox-RFID/settings/rc522.conf` after running the setup script. For polling mode and slow SPI, use values like:
+
+```ini
+speed=10000
+pin_irq=
+pin_rst=22
+remove_after=3.0
+partial_uids=536574:5365744c030001,53996b:53996b4c030001,53fa63:53fa634c030001
+```
+
+Then restart the service:
+
+```bash
+sudo systemctl restart phoniebox-rfid-reader.service
+```
+
+Use the logs to confirm card detection:
+
+```bash
+journalctl -u phoniebox-rfid-reader -f
+```
+
 ### Optional RC522 configuration
 
 The setup script creates `<phoniebox_dir>/settings/rc522.conf` with default values:
